@@ -1,36 +1,41 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Project } from '../types';
+import { useProjects } from '../hooks/useProjects';
 import ProjectsHeader from '../components/Projects/ProjectsHeader';
 import ProjectsGrid from '../components/Projects/ProjectsGrid';
 import ProjectsEmptyState from '../components/Projects/ProjectsEmptyState';
-import { useProjects } from '../hooks/useProjects';
-import type { Project } from '../types';
 
-export default function ProjectsPage() {
-  const navigate = useNavigate();
-  const { projects, loading, fetchProjects } = useProjects();
-  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+interface ProjectsPageProps {
+  onBack: () => void;
+  onEditProject: (project: Project) => void;
+}
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+export default function ProjectsPage({ onBack, onEditProject }: ProjectsPageProps) {
+  const { projects, deleteProject, duplicateProject } = useProjects();
 
-  const handleCreateProject = (title: string) => {
-    setShowNewProjectDialog(false);
-    navigate(`/editor/${title}`);
+  const handleDuplicate = (id: string) => {
+    duplicateProject(id);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteProject(id);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <ProjectsHeader onNewProject={() => setShowNewProjectDialog(true)} />
-      
-      <main className="max-w-7xl mx-auto px-4 py-12">
-        {projects.length === 0 && !loading ? (
-          <ProjectsEmptyState onCreateProject={() => setShowNewProjectDialog(true)} />
+    <div className="min-h-screen bg-gray-950">
+      <ProjectsHeader projectCount={projects.length} onBack={onBack} />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {projects.length === 0 ? (
+          <ProjectsEmptyState onCreateFirst={onBack} />
         ) : (
-          <ProjectsGrid projects={projects} isLoading={loading} />
+          <ProjectsGrid
+            projects={projects}
+            onEditProject={onEditProject}
+            onDuplicate={handleDuplicate}
+            onDelete={handleDelete}
+          />
         )}
-      </main>
+      </div>
     </div>
   );
 }

@@ -1,84 +1,152 @@
-import { useState, useEffect } from 'react';
-import { Project } from '../types';
+import { useState, useCallback, useEffect } from 'react';
+import { Project, Scene, ApiResponse } from '../types';
 
-const PROJECTS_STORAGE_KEY = 'visionforge_projects';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export const useProjects = () => {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const token = localStorage.getItem('authToken');
 
-  // Load projects from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-    if (stored) {
-      try {
-        setProjects(JSON.parse(stored));
-      } catch (error) {
-        console.error('Failed to load projects:', error);
-      }
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+
+  // Fetch all projects
+  const fetchProjects = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects`, {
+        headers,
+      });
+      if (!response.ok) throw new Error('Failed to fetch projects');
+      const data: ApiResponse<Project[]> = await response.json();
+      setProjects(data.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
     }
-    setIsLoaded(true);
-  }, []);
+  }, [token]);
 
-  // Save projects to localStorage whenever they change
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+  // Create project
+  const createProject = useCallback(async (title: string, description: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ title, description }),
+      });
+      if (!response.ok) throw new Error('Failed to create project');
+      const data: ApiResponse<Project> = await response.json();
+      setProjects((prev) => [data.data, ...prev]);
+      return data.data;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      return null;
+    } finally {
+      setLoading(false);
     }
-  }, [projects, isLoaded]);
+  }, [token]);
 
-  const saveProject = (project: Project) => {
-    setProjects((prevProjects) => {
-      const existingIndex = prevProjects.findIndex((p) => p.id === project.id);
-      if (existingIndex >= 0) {
-        // Update existing project
-        const updated = [...prevProjects];
-        updated[existingIndex] = {
-          ...project,
-          updatedAt: new Date().toISOString(),
-        };
-        return updated;
-      } else {
-        // Create new project
-        return [
-          ...prevProjects,
-          {
-            ...project,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ];
-      }
-    });
-  };
-
-  const deleteProject = (id: string) => {
-    setProjects((prevProjects) => prevProjects.filter((p) => p.id !== id));
-  };
-
-  const duplicateProject = (id: string) => {
-    const projectToDuplicate = projects.find((p) => p.id === id);
-    if (projectToDuplicate) {
-      const newProject: Project = {
-        ...projectToDuplicate,
-        id: Date.now().toString(),
-        name: `${projectToDuplicate.name} (Copy)`,
-      };
-      saveProject(newProject);
-      return newProject;
+  // Delete project
+  const deleteProject = useCallback(async (projectId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!response.ok) throw new Error('Failed to delete project');
+      setProjects((prev) => prev.filter((p) => p._id !== projectId));
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      return false;
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [token]);
 
-  const getProject = (id: string) => {
-    return projects.find((p) => p.id === id);
-  };
+  // Update project
+  const updateProject = useCallback(async (projectId: string, updates: Partial<Project>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error('Failed to update project');
+      const data: ApiResponse<Project> = await response.json();
+      setProjects((prev) =>
+        prev.map((p) => (p._id === projectId ? data.data : p))
+      );
+      return data.data;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  // Get single project
+  const getProject = useCallback(async (projectId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
+        headers,
+      });
+      if (!response.ok) throw new Error('Failed to fetch project');
+      const data: ApiResponse<Project> = await response.json();
+      return data.data;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  // Add scene to project
+  const addScene = useCallback(async (projectId: string, scene: Partial<Scene>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}/scenes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(scene),
+      });
+      if (!response.ok) throw new Error('Failed to add scene');
+      const data: ApiResponse<Scene> = await response.json();
+      return data.data;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   return {
     projects,
-    isLoaded,
-    saveProject,
+    loading,
+    error,
+    fetchProjects,
+    createProject,
     deleteProject,
-    duplicateProject,
+    updateProject,
     getProject,
+    addScene,
   };
 };
